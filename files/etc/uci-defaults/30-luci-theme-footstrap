@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# Set Footstrap as the initial LuCI theme. The package's post-install hook
+# is skipped while assembling a root filesystem, so set it on first boot.
+uci -q set luci.main.mediaurlbase='/luci-static/footstrap'
+uci -q set luci.themes.Footstrap='/luci-static/footstrap'
+uci -q commit luci
+
+exit 0

@@ -1,0 +1,152 @@
+name: Build PonWrt XG-040G-MD UBI
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: PonWrt commit, branch or tag (default passed configuration checks)
+        required: true
+        default: c3b518baec8ed0cc5a353327fa154f38bde1e6c0
+        type: string
+      publish_release:
+        description: Publish a prerelease after image validation
+        required: true
+        default: true
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build.yml'
+      - 'config/**'
+      - 'scripts/**'
+      - 'files/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ponwrt-xg040g-md-ubi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    env:
+      SOURCE_REPO: https://github.com/pbs05/ponwrt.git
+      SOURCE_REF: ${{ inputs.source_ref || 'c3b518baec8ed0cc5a353327fa154f38bde1e6c0' }}
+    steps:
+      - name: Checkout CI repository
+        uses: actions/checkout@v4
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          sudo apt-get clean
+          df -h
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler flex gawk \
+            gettext git g++-multilib gcc-multilib gperf help2man intltool \
+            libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev \
+            libtool libyaml-dev lld llvm ninja-build p7zip-full patch pkgconf \
+            python3 python3-docutils python3-pip python3-ply python3-pyelftools \
+            python3-setuptools qemu-utils re2c rsync scons squashfs-tools \
+            subversion swig texinfo uglifyjs unzip wget xmlto xxd zlib1g-dev zstd
+
+      - name: Clone PonWrt source snapshot
+        run: |
+          git init openwrt
+          cd openwrt
+          git remote add origin "$SOURCE_REPO"
+          git fetch --depth=1 -- origin "$SOURCE_REF"
+          git checkout --detach FETCH_HEAD
+          git log -1 --oneline
+
+      - name: Cache source downloads
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: ponwrt-dl-${{ runner.os }}-${{ hashFiles('config/**', 'scripts/customize.sh') }}-${{ env.SOURCE_REF }}
+          restore-keys: |
+            ponwrt-dl-${{ runner.os }}-${{ hashFiles('config/**') }}-
+            ponwrt-dl-${{ runner.os }}-
+
+      - name: Update and install feeds
+        working-directory: openwrt
+        run: |
+          cp ../config/feeds.conf feeds.conf.default
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Import existing custom packages
+        working-directory: openwrt
+        run: bash ../scripts/customize.sh
+
+      - name: Configure and validate MD UBI firmware
+        working-directory: openwrt
+        run: bash ../scripts/configure.sh
+
+      - name: Download sources
+        working-directory: openwrt
+        run: make download -j"$(nproc)"
+
+      - name: Build firmware
+        working-directory: openwrt
+        run: make -j"$(nproc)" V=s
+
+      - name: Validate and collect firmware
+        run: bash scripts/collect.sh
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PonWrt-XG-040G-MD-UBI
+          path: output/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload configuration and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PonWrt-build-diagnostics
+          path: |
+            openwrt/.config
+            openwrt/feeds.conf.default
+            openwrt/custom-package-commits.tsv
+            openwrt/requested-packages-dropped.txt
+            openwrt/logs/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Publish firmware prerelease
+        if: github.event_name == 'push' || inputs.publish_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BUILD_DATE="$(TZ=Asia/Shanghai date +'%Y.%m.%d-%H%M')"
+          SOURCE_SHA="$(git -C openwrt rev-parse HEAD)"
+          TAG="ponwrt-${BUILD_DATE}-r${GITHUB_RUN_NUMBER}"
+          cat > release-notes.md <<EOF
+          PonWrt for Nokia XG-040G-MD, airoha/an7581, all-in-UBI.
+
+          Source commit: ${SOURCE_SHA}
+          Runtime: existing ImmortalWrt CI package set plus the PonWrt onboard PON stack.
+          Validation: single MD UBI profile, image metadata, profiles.json and required rootfs packages.
+
+          Use the squashfs sysupgrade.itb for normal upgrades; the recovery.itb is a RAM recovery image.
+          Verify the running device layout and back up bosa/ri before switching firmware.
+          Package/feed revisions are listed in source-commits.tsv.
+          EOF
+          gh release create "$TAG" output/* \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "PonWrt XG-040G-MD UBI ${BUILD_DATE}" \
+            --notes-file release-notes.md --prerelease

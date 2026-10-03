@@ -1,0 +1,16 @@
+
+
+WARNING: Makefile 'package/feeds/packages/bmx7-dnsupdate/Makefile' has a dependency on 'bmx7', which does not exist
+WARNING: Makefile 'package/feeds/packages/bmx7-dnsupdate/Makefile' has a dependency on 'bmx7-json', which does not exist
+WARNING: Makefile 'package/feeds/luci/luci-app-babeld/Makefile' has a dependency on 'babeld', which does not exist
+WARNING: Makefile 'package/feeds/luci/luci-app-bmx7/Makefile' has a dependency on 'bmx7', which does not exist
+WARNING: Makefile 'package/feeds/luci/luci-app-bmx7/Makefile' has a dependency on 'bmx7-uci-config', which does not exist
+WARNING: Makefile 'package/feeds/luci/luci-app-bmx7/Makefile' has a dependency on 'bmx7-json', which does not exist
+WARNING: Makefile 'package/feeds/luci/luci-app-bmx7/Makefile' has a dependency on 'bmx7-tun', which does not exist
+WARNING: Makefile 'package/feeds/luci/luci-app-bmx7/Makefile' has a dependency on 'bmx7-iwinfo', which does not exist
+WARNING: Makefile 'package/feeds/packages/prometheus-node-exporter-lua/Makefile' has a dependency on 'bmx7', which does not exist
+WARNING: Makefile 'package/feeds/packages/prometheus-node-exporter-lua/Makefile' has a dependency on 'bmx7-json', which does not exist
+#
+# configuration written to .config
+#
+Validated MD UBI target and all required runtime packages.
