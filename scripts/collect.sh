@@ -32,6 +32,7 @@ cp "$SYSUPGRADE" "$RECOVERY" "$MANIFEST" "$OUTPUT_DIR/"
 cp "$TARGET_DIR/profiles.json" "$OUTPUT_DIR/profiles.json"
 cp "$SOURCE_DIR/.config" "$OUTPUT_DIR/build.config"
 cp "$SOURCE_DIR/feeds.conf.default" "$OUTPUT_DIR/feeds.conf.default"
+cp "$SOURCE_DIR/feeds-resolution.json" "$OUTPUT_DIR/feeds-resolution.json"
 if [ -s "$SOURCE_DIR/requested-packages-dropped.txt" ]; then
   cp "$SOURCE_DIR/requested-packages-dropped.txt" "$OUTPUT_DIR/"
 fi

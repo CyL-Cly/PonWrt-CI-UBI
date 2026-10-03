@@ -8,7 +8,7 @@
 
 当前需求是迁移自己的软件包选择并试用 PON 功能。独立 CI 仓库可以保持原
 [ImmortalWrt CI](https://github.com/Kahen/ImmortalWrt-CI-XG-040G-MD-UBI)
-的版本与构建流程，同时单独验证 PonWrt。后续跟进上游只需调整源码版本，
+的版本与构建流程，同时单独验证 PonWrt。每周构建会自动跟进上游 master，
 无需合并整个固件源码仓库。需要修改 PON 驱动、DTS 或向上游提交补丁时，
 再 fork PonWrt，并把 SOURCE_REPO 改为自己的 fork。
 
@@ -17,7 +17,9 @@
 | 项目 | 设置 |
 | --- | --- |
 | Source | pbs05/ponwrt |
-| 默认源码版本 | c3b518baec8ed0cc5a353327fa154f38bde1e6c0 |
+| 默认源码分支 | master，每次构建固定到实际拉取的 commit |
+| 已通过构建的基准版本 | c3b518baec8ed0cc5a353327fa154f38bde1e6c0 |
+| 每周构建 | 每周日 04:17，北京时间；GitHub 调度可能延迟 |
 | Target / Subtarget | airoha / an7581 |
 | Device | nokia_xg-040g-md-ubi |
 | 普通升级镜像 | *-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb |
@@ -40,8 +42,10 @@
 - 显式选择旧 CI 的关键运行依赖（dnsmasq-full、bash、ip-full、Ruby/YAML、
   unzip 等），合并 PonWrt release.config 的桥接卸载、透明代理等网络模块。
 - 使用与上游一致的 Ubuntu 24.04 构建环境。
-- 使用 config/feeds.conf 固定与源码同期的 feeds；避免最新 packages feed 的
-  input-support 等依赖超前于 PonWrt 源码，导致旧配置悄悄失效。
+- 从选定的 PonWrt 提交读取 feeds.conf.default。保留上游显式固定的版本；
+  未固定的 GitHub feeds 解析到不晚于源码提交时间的最新提交，并固定到本次构建。
+  避免 packages feed 的 input-support 等依赖超前于源码，导致旧配置悄悄失效。
+  config/feeds.conf 保留作为首个成功版本的基准记录，不再覆盖每周构建的 feeds。
 - 对解析后的 .config、实际镜像 metadata、profiles.json 和 rootfs manifest
   执行目标与关键包校验，失败时不上传固件或发布 Release。
 
@@ -55,9 +59,11 @@ config/required-packages.txt 中的包必须保留。其他旧配置中的符号
 2. 将本文件包的内容放在仓库根目录，包含 .github 目录。
 3. 提交后 push 到 main 会开始首次构建，也可以进入 Actions →
    Build PonWrt XG-040G-MD UBI → Run workflow 手动触发。
-4. 默认 source_ref 为上表中的固定提交；修改源码版本时也需要核对 feeds 版本。
+4. 默认 source_ref 为 master，自动跟随上游；需要复现旧版本时可填具体提交或 tag。
+   Feeds 会随所选源码版本解析，实际版本保存在构建产物中。
 5. 构建完成后下载 PonWrt-XG-040G-MD-UBI Artifact；成功构建默认也发布 prerelease。
-   手动运行时可以关闭 publish_release。该配置没有定时构建。
+   手动运行时可以关闭 publish_release。每周日北京时间 04:17 自动构建并发布
+   prerelease，即使上游本周没有新的源码提交也会构建一次。
 
 在本地创建并推送（先创建空仓库；以下用户名替换为实际用户）：
 
@@ -74,7 +80,7 @@ git push -u origin main
 CI 仓库与源码仓库并排放置。在 PonWrt 源码根目录运行：
 
 ```sh
-cp ../PonWrt-CI-XG-040G-MD-UBI/config/feeds.conf feeds.conf.default
+python3 ../PonWrt-CI-XG-040G-MD-UBI/scripts/resolve-feeds.py .
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 bash ../PonWrt-CI-XG-040G-MD-UBI/scripts/customize.sh
@@ -90,6 +96,7 @@ configure.sh 会合并三份配置并运行 make defconfig。若需要保存自�
 
 正常构建依赖见工作流中的 Install build dependencies。完整固件编译在 Actions
 执行，本文件包不包含可刷写固件。
+本地解析 Feeds 使用 GitHub API，可通过 GH_TOKEN 环境变量提供令牌以提高限额。
 
 ## 编译产物与版本记录
 
@@ -99,10 +106,13 @@ configure.sh 会合并三份配置并运行 make defconfig。若需要保存自�
 - build.config：make defconfig 后实际生效的完整配置。
 - sysupgrade-metadata.json、profiles.json：镜像与机型信息。
 - source-commits.tsv：源码、feeds、第三方包提交版本。
+- feeds-resolution.json：源码时间及每个 feed 的解析方式和固定提交。
 - requested-packages-dropped.txt：可选软件包配置未生效记录（如有）。
 - SHA256SUMS：两个 .itb 的 SHA256。
 
-主源码和 feeds 默认固定提交；第三方包沿用原项目的分支更新方式。
+主源码默认追踪 master，每次构建拉取后使用固定提交；feeds 随该源码时间解析并固定。
+时间匹配不能保证新上游版本总能编译，既有目标和关键包检查失败时不会发布固件。
+第三方包沿用原项目的分支更新方式。
 source-commits.tsv 用于检查每次实际使用的版本；第三方包仍可能随上游变化。
 customize.sh 只额外排除未选择的 squeezelite 音频包安装链接，避免该 snapshot
 中无关的音频 codec 循环依赖阻碍 Kconfig 解析。

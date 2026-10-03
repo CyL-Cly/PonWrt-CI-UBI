@@ -1,12 +1,15 @@
 name: Build PonWrt XG-040G-MD UBI
 
 on:
+  schedule:
+    # GitHub cron uses UTC: Saturday 20:17 = Sunday 04:17 in Asia/Shanghai.
+    - cron: '17 20 * * 6'
   workflow_dispatch:
     inputs:
       source_ref:
-        description: PonWrt commit, branch or tag (default passed configuration checks)
+        description: PonWrt commit, branch or tag (master follows upstream)
         required: true
-        default: c3b518baec8ed0cc5a353327fa154f38bde1e6c0
+        default: master
         type: string
       publish_release:
         description: Publish a prerelease after image validation
@@ -34,7 +37,7 @@ jobs:
     timeout-minutes: 360
     env:
       SOURCE_REPO: https://github.com/pbs05/ponwrt.git
-      SOURCE_REF: ${{ inputs.source_ref || 'c3b518baec8ed0cc5a353327fa154f38bde1e6c0' }}
+      SOURCE_REF: ${{ inputs.source_ref || 'master' }}
     steps:
       - name: Checkout CI repository
         uses: actions/checkout@v4
@@ -62,6 +65,7 @@ jobs:
             subversion swig texinfo uglifyjs unzip wget xmlto xxd zlib1g-dev zstd
 
       - name: Clone PonWrt source snapshot
+        id: source
         run: |
           git init openwrt
           cd openwrt
@@ -69,12 +73,18 @@ jobs:
           git fetch --depth=1 -- origin "$SOURCE_REF"
           git checkout --detach FETCH_HEAD
           git log -1 --oneline
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve feeds for the selected source revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/resolve-feeds.py openwrt
 
       - name: Cache source downloads
         uses: actions/cache@v4
         with:
           path: openwrt/dl
-          key: ponwrt-dl-${{ runner.os }}-${{ hashFiles('config/**', 'scripts/customize.sh') }}-${{ env.SOURCE_REF }}
+          key: ponwrt-dl-${{ runner.os }}-${{ hashFiles('config/**', 'scripts/customize.sh') }}-${{ steps.source.outputs.commit }}
           restore-keys: |
             ponwrt-dl-${{ runner.os }}-${{ hashFiles('config/**') }}-
             ponwrt-dl-${{ runner.os }}-
@@ -82,7 +92,6 @@ jobs:
       - name: Update and install feeds
         working-directory: openwrt
         run: |
-          cp ../config/feeds.conf feeds.conf.default
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
@@ -121,6 +130,7 @@ jobs:
           path: |
             openwrt/.config
             openwrt/feeds.conf.default
+            openwrt/feeds-resolution.json
             openwrt/custom-package-commits.tsv
             openwrt/requested-packages-dropped.txt
             openwrt/logs/
@@ -128,7 +138,7 @@ jobs:
           retention-days: 14
 
       - name: Publish firmware prerelease
-        if: github.event_name == 'push' || inputs.publish_release
+        if: github.event_name != 'workflow_dispatch' || inputs.publish_release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -139,12 +149,15 @@ jobs:
           PonWrt for Nokia XG-040G-MD, airoha/an7581, all-in-UBI.
 
           Source commit: ${SOURCE_SHA}
+          Requested source ref: ${SOURCE_REF}
+          Trigger: ${GITHUB_EVENT_NAME}. Weekly builds run Sunday 04:17 Asia/Shanghai (GitHub may delay scheduled jobs).
           Runtime: existing ImmortalWrt CI package set plus the PonWrt onboard PON stack.
           Validation: single MD UBI profile, image metadata, profiles.json and required rootfs packages.
 
           Use the squashfs sysupgrade.itb for normal upgrades; the recovery.itb is a RAM recovery image.
           Verify the running device layout and back up bosa/ri before switching firmware.
-          Package/feed revisions are listed in source-commits.tsv.
+          Unpinned feeds are resolved to commits no newer than the selected source snapshot, then pinned for this build.
+          Package/feed revisions are listed in source-commits.tsv; feeds-resolution.json records feed resolution.
           EOF
           gh release create "$TAG" output/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
