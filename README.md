@@ -1,133 +1,111 @@
-# PonWrt-CI-XG-040G-MD-UBI
+# PonWrt-CI
 
-为已经使用 all-in-UBI 布局的 Nokia XG-040G-MD 编译 PonWrt。
-该仓库只保存 CI、编译配置、第三方包导入脚本和文件覆盖层；编译时拉取
-[pbs05/ponwrt](https://github.com/pbs05/ponwrt) 源码。
+为 [pbs05/ponwrt](https://github.com/pbs05/ponwrt) 上游发布配置中的全部 PON 设备编译固件。
+每周跟随上游 master，沿用原 XG-040G-MD CI 的常用软件包和中文界面。
+仓库保存 CI、配置片段、包导入脚本与文件覆盖层，编译时拉取 PonWrt 源码。
 
-## 为什么使用独立 CI 仓库
+## 支持机型
 
-当前需求是迁移自己的软件包选择并试用 PON 功能。独立 CI 仓库可以保持原
-[ImmortalWrt CI](https://github.com/Kahen/ImmortalWrt-CI-XG-040G-MD-UBI)
-的版本与构建流程，同时单独验证 PonWrt。每周构建会自动跟进上游 master，
-无需合并整个固件源码仓库。需要修改 PON 驱动、DTS 或向上游提交补丁时，
-再 fork PonWrt，并把 SOURCE_REPO 改为自己的 fork。
+当前覆盖 AN7581 的 12 个 profile 和 AN7583 的 2 个 profile，共 14 个机型/布局配置。
+每次构建从选定源码的 configs/an7581.config、configs/an7583.config 自动读取机型，
+并检查源码设备定义和中文 README，防止漏掉上游已列出的设备。
+构建范围与 PonWrt 的 PON 发布配置一致；不是 Airoha 目录下所有开发板。
 
-## 固定目标
+| 芯片 | 设备/变体 | 下载文件中的 profile |
+| --- | --- | --- |
+| AN7581 | FiberHome HG5382A | `fiberhome_hg5382a` |
+| AN7581 | FiberHome HG5585F CT | `fiberhome_hg5585f-ct` |
+| AN7581 | FiberHome HG5585F CT USB-SFP | `fiberhome_hg5585f-ct-usb-sfp` |
+| AN7581 | FiberHome HG5585F CU | `fiberhome_hg5585f-cu` |
+| AN7581 | FiberHome HG5585F CU USB-SFP | `fiberhome_hg5585f-cu-usb-sfp` |
+| AN7581 | Gemtek XG2010G | `gemtek_xg2010g` |
+| AN7581 | Nokia XG-040G-MD UBI | `nokia_xg-040g-md-ubi` |
+| AN7581 | Nokia XG-040G-MD UBI USB-SFP | `nokia_xg-040g-md-ubi-usb-sfp` |
+| AN7581 | Nokia XG-040G-TF UBI | `nokia_xg-040g-tf-ubi` |
+| AN7581 | UnionMan UNG00A | `unionman_ung00a` |
+| AN7581 | ZNXT ZN504XG-D | `znxt_zn504xg-d` |
+| AN7581 | ZNXT ZN515XG-D | `znxt_zn515xg-d` |
+| AN7583 | Nokia XG-040G-MF 原布局 | `nokia_xg-040g-mf` |
+| AN7583 | Nokia XG-040G-MF all-in-UBI | `nokia_xg-040g-mf-ubi` |
 
-| 项目 | 设置 |
+USB-SFP 与内置 PON 版本分别构建；MF 原布局与 UBI 布局分别构建。
+XG-040G-MD 固件不能用于 ZN504XG-D，必须选择对应 profile 的镜像。
+最新实际构建范围以每次 Release 的 `device-catalog.json` 为准。
+
+## 构建与下载
+
+- 每周日 **04:17，北京时间**自动构建并发布 prerelease；GitHub 调度可能延迟。
+  即使本周上游没有新提交，也会构建一次。
+- 修改编译相关文件并 push 到 main 会触发构建；仅修改 README 不触发。
+- 手动运行：Actions → **Build PonWrt supported PON devices** → Run workflow。
+  `source_ref` 默认 master，也可填上游提交或 tag；`publish_release` 可关闭发布。
+- 两个芯片任务并行，每组使用独立的设备 rootfs；每个 profile 生成自己的固件。
+  两组使用同一个源码提交和同一份固定 feeds，不会混用不同版本。
+- **两组全部成功且所有机型通过校验后才发布 Release。**
+  任一机型缺镜像、错板名、哈希不符或缺关键软件包都会阻止发布。
+  单组成功时，仍可在该次 Actions 下载对应的 `PonWrt-firmware-an7581` /
+  `PonWrt-firmware-an7583` Artifact；诊断文件另存为 `PonWrt-diagnostics-*`。
+- 发布版本均标记 prerelease。通过编译与静态校验不代表所有实机都已测试。
+
+在仓库 **Releases** 下载对应完整型号、变体和布局的文件。
+使用 `profiles.json`、Release 机型表和文件名共同核对，不要只看芯片型号。
+
+| 文件 | 用途 |
 | --- | --- |
-| Source | pbs05/ponwrt |
-| 默认源码分支 | master，每次构建固定到实际拉取的 commit |
-| 已通过构建的基准版本 | c3b518baec8ed0cc5a353327fa154f38bde1e6c0 |
-| 每周构建 | 每周日 04:17，北京时间；GitHub 调度可能延迟 |
-| Target / Subtarget | airoha / an7581 |
-| Device | nokia_xg-040g-md-ubi |
-| 普通升级镜像 | *-nokia_xg-040g-md-ubi-squashfs-sysupgrade.itb |
-| 恢复镜像 | *-nokia_xg-040g-md-ubi-initramfs-recovery.itb |
+| `*-squashfs-sysupgrade.itb` / `*-squashfs-sysupgrade.bin` | 对应机型和已匹配布局的系统升级镜像 |
+| `*-initramfs-recovery.itb` / 名称含 `initramfs` 的镜像 | RAM 启动、恢复或迁移流程使用，不是普通升级包 |
+| 上游原生 `factory-*`、`preloader.bin`、`bl31-uboot.fip`（若该 profile 生成） | 初装/引导链文件，按该机型上游流程使用 |
+| `*.manifest` | 从该 sysupgrade 的真实 rootfs 提取的软件包清单 |
+| `*-sysupgrade-metadata.json` | 升级镜像板名、目标与 supported_devices |
+| `an7581/3-profiles.json`、`*-build-summary.json` | 对应芯片的机型与镜像信息 |
+| `an7581/3-build.config` | 实际 make defconfig 后生效的配置 |
+| `*-source-commits.tsv`、`*-feeds-resolution.json` | 本次源码、feeds 与第三方包版本记录 |
+| `device-catalog.json` | 本次选择的全部 profile 与源码提交 |
+| `SHA256SUMS-an7581`、`SHA256SUMS-an7583` | 对应芯片的固件及记录文件校验和 |
 
-不使用上游 configs/an7581.config 中的多机型选择，不构建 MD USB-SFP、TF、MF
-或非 UBI 机型。使用 MD 内置 PON 光口。
+本仓库不额外制作 XG-040G-MD factory 转换固件。保留上游各 profile 自带的产物；
+MF 原布局的原生 factory 分拆文件不等同于 MD 的 UBI 迁移包。
 
-## 迁移内容
+## 软件包与硬件配置
 
-- 保留原 config/xg040g-md-ubi.config 中的 NPU 固件、诊断、USB 与文件系统选择。
-- 保留原 config/general-packages.config 的软件包基线：OpenClash、Lucky、
-  GecoosAC、Samba4、UPnP、WOL Ultra、Footstrap、中文 LuCI 等。
-  原 autocore-arm 选项已不存在，使用仍可用的 autocore 包。
-- 保留原第三方包来源和 Footstrap 首次启动配置。
-- 自动重启插件从官方 LuCI 单独导入，并修正其相对 luci.mk 路径，保持它在
-  本源码版本中的编译配置可用。
-- 新增 pon-packages.config：PON frontend、EN7572、xPON MAC 驱动，
-  airoha-ponctl、airoha-pond、PON 调试工具与 luci-app-pon。
-- 显式选择旧 CI 的关键运行依赖（dnsmasq-full、bash、ip-full、Ruby/YAML、
-  unzip 等），合并 PonWrt release.config 的桥接卸载、透明代理等网络模块。
-- 使用与上游一致的 Ubuntu 24.04 构建环境。
-- 从选定的 PonWrt 提交读取 feeds.conf.default。保留上游显式固定的版本；
-  未固定的 GitHub feeds 解析到不晚于源码提交时间的最新提交，并固定到本次构建。
-  避免 packages feed 的 input-support 等依赖超前于源码，导致旧配置悄悄失效。
-  config/feeds.conf 保留作为首个成功版本的基准记录，不再覆盖每周构建的 feeds。
-- 对解析后的 .config、实际镜像 metadata、profiles.json 和 rootfs manifest
-  执行目标与关键包校验，失败时不上传固件或发布 Release。
+共用原 CI 的 OpenClash、Lucky、GecoosAC（集客 AC）、Samba4、UPnP、WOL Ultra、
+Footstrap、自动重启插件、中文 LuCI，以及 PON 页面、PON 驱动与调试工具。
+PON 配置入口：**网络 → PON**。
 
-config/required-packages.txt 中的包必须保留。其他旧配置中的符号如果被上游删除、
-改名或无法满足依赖，会列入 requested-packages-dropped.txt；这不等于所有可选包
-都已验证运行正常。
+- `config/common.config`：通用诊断、USB、文件系统与恢复所需驱动。
+- `config/general-packages.config`：原 CI 的应用和 LuCI 选择。
+- `config/pon-packages.config`：PON 栈、网络模块与关键运行依赖。
+- 各机型上游默认硬件包按 profile 安装；无线、EEPROM、PHY 等依赖不会从 MD 复制到所有设备。
+  AN7581 / AN7583 分别选择相应 NPU 固件。
+- `config/required-packages.txt` 中的关键包与对应芯片 NPU 固件必须出现在每个升级镜像中。
+  校验从 FIT 或 tar 镜像中读取 squashfs 的 apk/opkg 数据库，而非只检查总包清单。
+  隐藏的 fitblk 在多机型配置中允许以 m 编译，仍必须安装进上游要求它的机型镜像。
+- 其他已请求的可选符号若被上游删除或依赖不满足，会写入
+  `*-requested-packages-dropped.txt`；可选包的存在不代表已验证全部运行功能。
+- 第三方包延续原来源和更新方式，实际提交记录在每次构建产物中。
+  保留的 attendedsysupgrade 插件不是本 CI 的升级发布入口。
 
-## 创建并运行
+每次先固定 PonWrt 源码 commit，再解析 feeds：保留上游已固定的版本；
+未固定的 GitHub feed 选择不晚于源码提交时间的最新提交，并锁定到本次构建。
+这能减少 feed 超前的问题，但不能保证未来所有上游版本一定编译成功。
 
-1. 在 GitHub 创建仓库，建议命名 PonWrt-CI-XG-040G-MD-UBI，默认分支 main。
-2. 将本文件包的内容放在仓库根目录，包含 .github 目录。
-3. 提交后 push 到 main 会开始首次构建，也可以进入 Actions →
-   Build PonWrt XG-040G-MD UBI → Run workflow 手动触发。
-4. 默认 source_ref 为 master，自动跟随上游；需要复现旧版本时可填具体提交或 tag。
-   Feeds 会随所选源码版本解析，实际版本保存在构建产物中。
-5. 构建完成后下载 PonWrt-XG-040G-MD-UBI Artifact；成功构建默认也发布 prerelease。
-   手动运行时可以关闭 publish_release。每周日北京时间 04:17 自动构建并发布
-   prerelease，即使上游本周没有新的源码提交也会构建一次。
+`config/xg040g-md-ubi.config`、`menuconfig.config`、`validation/resolved.config` 和
+`config/feeds.conf` 保留作最初 MD 成功版本的记录，不参与当前多机型配置合并。
 
-在本地创建并推送（先创建空仓库；以下用户名替换为实际用户）：
+## 刷机前确认
 
-```sh
-git init -b main
-git add .
-git commit -m 'Add PonWrt MD UBI CI and migrate existing package configuration'
-git remote add origin https://github.com/Kahen/PonWrt-CI-XG-040G-MD-UBI.git
-git push -u origin main
-```
+按 [PonWrt 中文说明](https://github.com/pbs05/ponwrt/blob/master/README_zh.md)
+中的对应机型流程核对引导链、分区和校准数据，再选镜像。
+UBI 固件不会自动把原有非 UBI 分区迁移成 all-in-UBI。
 
-## 本地使用编译配置
+| 机型 | 需要保留的本机原始数据 |
+| --- | --- |
+| FiberHome | `factory`；上游要求通过 fiberhome-factory 工具转换 |
+| Gemtek | `dsd` |
+| Nokia | `bosa`、`ri` |
+| UnionMan / ZNXT | `reservearea`；按上游流程还原到 factory UBI 卷 |
 
-CI 仓库与源码仓库并排放置。在 PonWrt 源码根目录运行：
-
-```sh
-python3 ../PonWrt-CI-XG-040G-MD-UBI/scripts/resolve-feeds.py .
-./scripts/feeds update -a
-./scripts/feeds install -a
-bash ../PonWrt-CI-XG-040G-MD-UBI/scripts/customize.sh
-bash ../PonWrt-CI-XG-040G-MD-UBI/scripts/configure.sh
-make menuconfig  # 可选：检查或调整选项
-make download -j"$(nproc)"
-make -j"$(nproc)" V=s
-```
-
-configure.sh 会合并三份配置并运行 make defconfig。若需要保存自己在 menuconfig
-中的后续改动，可以运行 ./scripts/diffconfig.sh，评估输出后同步回 config/ 下的
-配置片段；configure.sh 每次都会重建 .config。
-
-正常构建依赖见工作流中的 Install build dependencies。完整固件编译在 Actions
-执行，本文件包不包含可刷写固件。
-本地解析 Feeds 使用 GitHub API，可通过 GH_TOKEN 环境变量提供令牌以提高限额。
-
-## 编译产物与版本记录
-
-- sysupgrade.itb：正常升级镜像。
-- recovery.itb：RAM 恢复镜像，不作为普通升级包。
-- *.manifest：实际固件的软件包清单。
-- build.config：make defconfig 后实际生效的完整配置。
-- sysupgrade-metadata.json、profiles.json：镜像与机型信息。
-- source-commits.tsv：源码、feeds、第三方包提交版本。
-- feeds-resolution.json：源码时间及每个 feed 的解析方式和固定提交。
-- requested-packages-dropped.txt：可选软件包配置未生效记录（如有）。
-- SHA256SUMS：两个 .itb 的 SHA256。
-
-主源码默认追踪 master，每次构建拉取后使用固定提交；feeds 随该源码时间解析并固定。
-时间匹配不能保证新上游版本总能编译，既有目标和关键包检查失败时不会发布固件。
-第三方包沿用原项目的分支更新方式。
-source-commits.tsv 用于检查每次实际使用的版本；第三方包仍可能随上游变化。
-customize.sh 只额外排除未选择的 squeezelite 音频包安装链接，避免该 snapshot
-中无关的音频 codec 循环依赖阻碍 Kconfig 解析。
-
-## 切换固件前的设备检查
-
-目标 profile 同名只说明构建目标匹配，不能替代对设备当前布局的检查。
-PonWrt 当前 DTS 使用 128 KiB BL2 区域，UBI 从 0x20000 开始，
-并使用 bosa、ri、fip、fit、ubootenv、ubootenv2 等 UBI 卷。
-
-旧讨论曾出现 bootloader 512 KiB + env 512 KiB + ubi 的分区表；如果设备目前
-仍使用那份布局，不要仅凭 .itb 文件名进行升级。应以设备当前分区和引导链为准。
-本项目不会修改 Bootloader 或替设备迁移分区。
-
-切换前保存以下信息和设备自身的原始 bosa/ri 备份：
+保存设备当前信息和本机原始备份，尤其是布局转换前：
 
 ```sh
 ubus call system board
@@ -135,21 +113,42 @@ cat /proc/mtd
 ubinfo -a
 ```
 
-确认当前板名、UBI 起始位置、引导链和校准卷匹配后，再对下载的 sysupgrade.itb
-运行 sysupgrade -T 检查。检查失败时不要强制升级。
-从旧构建切换时通常需要重新配置，预先导出自己的网络/PPPoE/VLAN 参数。
-本包迁移的是编译配置，不含 PPPoE 密码、PON 认证凭据或设备校准数据。
+确认板名、布局、引导链与镜像匹配后，先运行 `sysupgrade -T <镜像>`。
+检查失败时不要强制刷入。切换固件前保存网络、PPPoE 和 VLAN 设置；
+此仓库不包含用户认证凭据或校准数据。PON 驱动与页面存在也不保证运营商 OLT 注册成功。
 
-PON 驱动和 LuCI 页面存在，不代表一定能通过你的运营商 OLT 注册。
-使用设备自身的 bosa/ri，并在设备上核对 PON 注册、OMCI/OAM、VLAN 与 PPPoE 状态。
-LuCI PON 配置位于 网络 → PON。保留的 attendedsysupgrade 插件不是该自定义
-CI 的发布入口；后续升级从本仓库的构建产物获取。
+MD all-in-UBI 上游布局使用 128 KiB BL2 区域、UBI 从 0x20000 开始；
+如果当前设备仍是旧 Bootloader 512 KiB + env 512 KiB + ubi 布局，
+必须先按上游迁移流程核对，不能仅凭文件名直接升级。
+
+## 本地构建
+
+安装依赖见 `.github/workflows/build.yml`。CI 仓库与 PonWrt 源码并排放置，
+在 PonWrt 源码目录执行以下命令；`an7581` 可替换为 `an7583`：
+
+```sh
+python3 ../PonWrt-CI/scripts/devices.py discover . ../device-catalog.json
+python3 ../PonWrt-CI/scripts/resolve-feeds.py .
+./scripts/feeds update -a
+./scripts/feeds install -a
+bash ../PonWrt-CI/scripts/customize.sh
+bash ../PonWrt-CI/scripts/configure.sh an7581 ../device-catalog.json
+make download -j"$(nproc)"
+make -j"$(nproc)" V=s
+bash ../PonWrt-CI/scripts/collect.sh . ../output/an7581 an7581 ../device-catalog.json
+```
+
+`configure.sh` 每次重新生成 `.config`。如需调整应用，在 `config/` 片段中维护；
+可用 `make menuconfig` 检查，再评估 `./scripts/diffconfig.sh` 的输出。
+GitHub Actions 同时构建两种芯片，本地分别构建时需要独立源码目录或清理目标构建目录。
+本地 feeds 解析可用 `GH_TOKEN` 提高 GitHub API 限额。
 
 ## 来源
 
-- 原 CI：Kahen/ImmortalWrt-CI-XG-040G-MD-UBI，迁移基准提交
-  bce6b04f39fd2b2238c76c9bef6ba789f11ad10a。
-- PON 目标与包选择：pbs05/ponwrt、pbs05/openwrt-pon-drivers、
-  pbs05/openwrt-pon-userspace。
-- 第三方包来源延续原仓库：vernesong/OpenClash、sirpdboy/luci-app-lucky、
-  VIKINGYFY/packages、bingoguo93/luci-app-airoha-npu、VizzleTF/luci-theme-footstrap。
+- 固件与机型定义：[pbs05/ponwrt](https://github.com/pbs05/ponwrt)。
+- PON 包：[pbs05/openwrt-pon-drivers](https://github.com/pbs05/openwrt-pon-drivers)、
+  [pbs05/openwrt-pon-userspace](https://github.com/pbs05/openwrt-pon-userspace)。
+- 原应用配置：[Kahen/ImmortalWrt-CI-XG-040G-MD-UBI](https://github.com/Kahen/ImmortalWrt-CI-XG-040G-MD-UBI)，
+  迁移基准提交 `bce6b04f39fd2b2238c76c9bef6ba789f11ad10a`。
+- 第三方包：vernesong/OpenClash、sirpdboy/luci-app-lucky、VIKINGYFY/packages、
+  bingoguo93/luci-app-airoha-npu、VizzleTF/luci-theme-footstrap。
