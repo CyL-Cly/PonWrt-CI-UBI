@@ -12,7 +12,7 @@ on:
         default: master
         type: string
       publish_release:
-        description: Publish all validated device images as a prerelease
+        description: Publish all validated device images as a formal release
         required: true
         default: true
         type: boolean
@@ -192,7 +192,7 @@ jobs:
         run: |
           python3 scripts/release-notes.py output build-plan/catalog.json release-notes.md
           cp build-plan/catalog.json output/device-catalog.json
-      - name: Publish firmware prerelease
+      - name: Publish firmware release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -201,4 +201,4 @@ jobs:
           gh release create "$TAG" output/* \
             --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
             --title "PonWrt all PON devices ${BUILD_DATE}" \
-            --notes-file release-notes.md --prerelease
+            --notes-file release-notes.md --latest

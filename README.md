@@ -1,4 +1,4 @@
-# PonWrt-CI
+# PonWrt-CI-UBI
 
 为 [pbs05/ponwrt](https://github.com/pbs05/ponwrt) 上游发布配置中的全部 PON 设备编译固件。
 每周跟随上游 master，沿用原 XG-040G-MD CI 的常用软件包和中文界面。
@@ -34,7 +34,7 @@ XG-040G-MD 固件不能用于 ZN504XG-D，必须选择对应 profile 的镜像�
 
 ## 构建与下载
 
-- 每周日 **04:17，北京时间**自动构建并发布 prerelease；GitHub 调度可能延迟。
+- 每周日 **04:17，北京时间**自动构建并发布正式 Release；GitHub 调度可能延迟。
   即使本周上游没有新提交，也会构建一次。
 - 修改编译相关文件并 push 到 main 会触发构建；仅修改 README 不触发。
 - 手动运行：Actions → **Build PonWrt supported PON devices** → Run workflow。
@@ -45,9 +45,11 @@ XG-040G-MD 固件不能用于 ZN504XG-D，必须选择对应 profile 的镜像�
   任一机型缺镜像、错板名、哈希不符或缺关键软件包都会阻止发布。
   单组成功时，仍可在该次 Actions 下载对应的 `PonWrt-firmware-an7581` /
   `PonWrt-firmware-an7583` Artifact；诊断文件另存为 `PonWrt-diagnostics-*`。
-- 发布版本均标记 prerelease。通过编译与静态校验不代表所有实机都已测试。
+- 构建通过后发布正式 Release，并设为最新版本。通过编译与静态校验不代表所有实机都已测试。
 
-在仓库 **Releases** 下载对应完整型号、变体和布局的文件。
+在仓库 [Releases](https://github.com/Kahen/PonWrt-CI-UBI/releases) 下载对应完整型号、变体和布局的文件。
+已有的全机型预发布版本可用 Actions → **Promote existing firmware release** 转为正式版，
+留空 tag 选择最近发布的非草稿版本；只修改发布状态，不重建固件或替换附件。
 使用 `profiles.json`、Release 机型表和文件名共同核对，不要只看芯片型号。
 
 | 文件 | 用途 |
@@ -127,15 +129,15 @@ MD all-in-UBI 上游布局使用 128 KiB BL2 区域、UBI 从 0x20000 开始；
 在 PonWrt 源码目录执行以下命令；`an7581` 可替换为 `an7583`：
 
 ```sh
-python3 ../PonWrt-CI/scripts/devices.py discover . ../device-catalog.json
-python3 ../PonWrt-CI/scripts/resolve-feeds.py .
+python3 ../PonWrt-CI-UBI/scripts/devices.py discover . ../device-catalog.json
+python3 ../PonWrt-CI-UBI/scripts/resolve-feeds.py .
 ./scripts/feeds update -a
 ./scripts/feeds install -a
-bash ../PonWrt-CI/scripts/customize.sh
-bash ../PonWrt-CI/scripts/configure.sh an7581 ../device-catalog.json
+bash ../PonWrt-CI-UBI/scripts/customize.sh
+bash ../PonWrt-CI-UBI/scripts/configure.sh an7581 ../device-catalog.json
 make download -j"$(nproc)"
 make -j"$(nproc)" V=s
-bash ../PonWrt-CI/scripts/collect.sh . ../output/an7581 an7581 ../device-catalog.json
+bash ../PonWrt-CI-UBI/scripts/collect.sh . ../output/an7581 an7581 ../device-catalog.json
 ```
 
 `configure.sh` 每次重新生成 `.config`。如需调整应用，在 `config/` 片段中维护；

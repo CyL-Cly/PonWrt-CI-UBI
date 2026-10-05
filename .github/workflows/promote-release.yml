@@ -1,0 +1,59 @@
+name: Promote existing firmware release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing full-device release tag (empty selects the most recent release)
+        required: false
+        default: ''
+        type: string
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/promote-release.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ponwrt-promote-release
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Promote the published full-device firmware set
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RELEASE_TAG" ]; then
+            RELEASE_TAG="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '[.[] | select(.draft == false)][0].tag_name')"
+          fi
+          if [ -z "$RELEASE_TAG" ] || [ "$RELEASE_TAG" = null ]; then
+            echo "No published release to promote." >&2
+            exit 1
+          fi
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft,isPrerelease,assets > release.json
+          python3 - <<'PY'
+          import json
+          release = json.load(open('release.json'))
+          names = {item['name'] for item in release['assets']}
+          required = {
+              'device-catalog.json', 'an7581-build-summary.json', 'an7583-build-summary.json',
+              'SHA256SUMS-an7581', 'SHA256SUMS-an7583',
+          }
+          if release['isDraft'] or required - names:
+              raise SystemExit('Only a published, validated full-device firmware set can be promoted.')
+          print('Promoting validated release: ' + release['tagName'])
+          PY
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --prerelease=false --latest
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json url,isDraft,isPrerelease
