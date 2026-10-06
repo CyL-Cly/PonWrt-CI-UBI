@@ -38,7 +38,35 @@ clone_direct() {
     echo "ERROR: ${repo} was cloned but ./package/${target}/Makefile is missing." >&2
     exit 1
   fi
+  normalize_luci_package "$target"
   record_commit "$repo" "./package/${target}"
+}
+
+# Make a directly imported LuCI package safe to build from ./package.
+#
+# A standalone LuCI Makefile carries two constructs that only work inside the
+# luci feed, and both of them silently hide the package from defconfig:
+#
+#   include ../../luci.mk   resolves to a path that does not exist once the
+#                           package sits in ./package, so pin the absolute path;
+#   LUCI_DEPENDS+= @TARGET_x refers to a symbol declared in target/Config.in,
+#                           which the package Kconfig file cannot see, so the
+#                           condition can never be satisfied. This image only
+#                           ever targets airoha, so drop those conditions.
+#
+# PKG_NAME is pinned as well so the package identity never depends on
+# directory-name derivation.
+normalize_luci_package() {
+  local target="$1"
+  local makefile="./package/${target}/Makefile"
+
+  grep -q 'feeds/luci/luci.mk' "$makefile" || return 0
+
+  sed -i 's|^\s*include\s*\(\.\./\)\{2\}luci\.mk\s*$|include $(TOPDIR)/feeds/luci/luci.mk|' "$makefile"
+  sed -i 's|[[:space:]]\+@TARGET_[A-Za-z0-9_]*||g' "$makefile"
+  if ! grep -q '^PKG_NAME:=' "$makefile"; then
+    sed -i "1i PKG_NAME:=${target}" "$makefile"
+  fi
 }
 
 echo "Importing the third-party packages used by the package set..."
