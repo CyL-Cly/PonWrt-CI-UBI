@@ -19,6 +19,7 @@ luci-ssl
 luci-proto-ipv6
 luci-proto-ppp
 luci-i18n-base-zh-cn
+luci-app-airoha-npu
 uhttpd
 uhttpd-mod-ubus
 uhttpd-mod-ucode

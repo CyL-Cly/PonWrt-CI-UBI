@@ -24,22 +24,36 @@ clone_direct() {
   local branch="$3"
 
   remove_matches "$target"
-  git clone --depth=1 --single-branch --branch "$branch" \
-    "https://github.com/${repo}.git" "./package/${target}"
+  # GIT_TERMINAL_PROMPT=0 turns a missing or private repository into an
+  # immediate error instead of a blocking credential prompt.
+  if ! GIT_TERMINAL_PROMPT=0 git clone --depth=1 --single-branch --branch "$branch" \
+      "https://github.com/${repo}.git" "./package/${target}"; then
+    echo "ERROR: cannot clone ${repo} (branch ${branch})." >&2
+    echo "The source may have been removed, renamed or made private." >&2
+    echo "Then update scripts/customize.sh, config/common.config and" >&2
+    echo "config/required-packages.txt together, or drop the package." >&2
+    exit 1
+  fi
+  if [ ! -f "./package/${target}/Makefile" ]; then
+    echo "ERROR: ${repo} was cloned but ./package/${target}/Makefile is missing." >&2
+    exit 1
+  fi
   record_commit "$repo" "./package/${target}"
 }
 
-# The XG-040G-TF image is now built entirely from the PonWrt feeds; no external
-# package source is imported.
+echo "Importing the third-party packages used by the package set..."
+
+# Management page for the Airoha NPU, showing NPU state and reserved memory,
+# Frame Engine counters, the PPE flow offload table and CPU frequency.
 #
-# The Airoha NPU management page used to be imported here from
-# bingoguo93/luci-app-airoha-npu, but that repository now returns 404 and the
-# package is not part of any PonWrt feed, so importing it can only fail. The NPU
-# firmware (airoha-en7581-npu-firmware) and hardware offload stay in the image
-# and can be inspected from the shell. To bring the page back, clone it into
-# ./package/ and add CONFIG_PACKAGE_luci-app-airoha-npu=y to
-# config/common.config plus the same entry in config/required-packages.txt.
-# The helpers above are the supported way to do that.
+# It was originally taken from bingoguo93/luci-app-airoha-npu, which now returns
+# 404 and is no longer listed among that owner's public repositories. This fork
+# is used instead: it is a plain LuCI package whose directory name yields the
+# luci-app-airoha-npu package and whose Makefile already includes
+# $(TOPDIR)/feeds/luci/luci.mk, so it can be imported without any include
+# fixup. Its register accesses need CONFIG_BUSYBOX_CONFIG_DEVMEM, which
+# config/common.config already enables.
+clone_direct "luci-app-airoha-npu" "rchen14b/luci-app-airoha-npu" "main"
 
 # This unselected audio package has a circular codec dependency with this
 # source/feed snapshot. Exclude only its installed feed symlink so the
