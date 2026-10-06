@@ -29,12 +29,17 @@ clone_direct() {
   record_commit "$repo" "./package/${target}"
 }
 
-echo "Importing the third-party package used by the package set..."
-
-# Management page for the Airoha NPU hardware offload engine. This is the only
-# external package the XG-040G-TF image needs; every other application comes
-# from the LuCI tree shipped by the PonWrt feeds.
-clone_direct "luci-app-airoha-npu" "bingoguo93/luci-app-airoha-npu" "main"
+# The XG-040G-TF image is now built entirely from the PonWrt feeds; no external
+# package source is imported.
+#
+# The Airoha NPU management page used to be imported here from
+# bingoguo93/luci-app-airoha-npu, but that repository now returns 404 and the
+# package is not part of any PonWrt feed, so importing it can only fail. The NPU
+# firmware (airoha-en7581-npu-firmware) and hardware offload stay in the image
+# and can be inspected from the shell. To bring the page back, clone it into
+# ./package/ and add CONFIG_PACKAGE_luci-app-airoha-npu=y to
+# config/common.config plus the same entry in config/required-packages.txt.
+# The helpers above are the supported way to do that.
 
 # This unselected audio package has a circular codec dependency with this
 # source/feed snapshot. Exclude only its installed feed symlink so the
