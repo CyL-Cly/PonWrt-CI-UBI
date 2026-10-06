@@ -55,7 +55,35 @@ jobs:
           git -C source fetch --depth=1 -- origin "$SOURCE_REF"
           git -C source checkout --detach FETCH_HEAD
           mkdir -p build-plan
-          python3 scripts/devices.py discover source build-plan/catalog.json
+          # Single-profile plan for the Nokia XG-040G-TF. This replaces
+          # "devices.py discover", which expanded all 14 upstream profiles. The
+          # upstream release config and image recipe are still cross-checked so
+          # the plan fails fast if the device stops being buildable.
+          python3 - <<'PY'
+          import json, pathlib, re, subprocess
+          SUBTARGET = 'an7581'
+          PROFILE = 'nokia_xg-040g-tf-ubi'
+          source = pathlib.Path('source')
+          config = (source / 'configs' / f'{SUBTARGET}.config').read_text()
+          selected = set(re.findall(
+              rf'^CONFIG_TARGET_(?:DEVICE_)?airoha_{SUBTARGET}_DEVICE_([\w-]+)=y$',
+              config, re.MULTILINE))
+          if PROFILE not in selected:
+              raise SystemExit(f'Upstream {SUBTARGET}.config does not select {PROFILE}')
+          supported = set(re.findall(
+              r'^TARGET_DEVICES\s*\+=\s*([\w-]+)\s*$',
+              (source / 'target/linux/airoha/image' / f'{SUBTARGET}.mk').read_text(),
+              re.MULTILINE))
+          if PROFILE not in supported:
+              raise SystemExit(f'Upstream {SUBTARGET}.mk does not declare {PROFILE}')
+          sha = subprocess.check_output(
+              ['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
+          catalog = {'source_commit': sha,
+                     'targets': {SUBTARGET: [PROFILE]},
+                     'profile_count': 1}
+          pathlib.Path('build-plan/catalog.json').write_text(json.dumps(catalog, indent=2) + '\n')
+          print(f"Planned 1 profile: {catalog['targets']}")
+          PY
           python3 scripts/resolve-feeds.py source
           cp source/feeds.conf.default source/feeds-resolution.json build-plan/
           python3 - <<'PY'
@@ -173,7 +201,9 @@ jobs:
 
   release:
     needs: [prepare, build]
-    if: github.event_name != 'workflow_dispatch' || inputs.publish_release
+    # Disabled: the validated artifact set is enough for this repository, so no
+    # Release is published from a personal fork.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

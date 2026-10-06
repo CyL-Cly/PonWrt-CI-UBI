@@ -1,6 +1,14 @@
-# Fail CI if any package is absent from the resolved config or final image.
+# Fail CI if any package is absent from the resolved config or the final image.
+# Minimal system-essential set for the Nokia XG-040G-TF (AN7581).
+#
+# Invariant: every entry below must be selected by config/common.config,
+# config/general-packages.config or config/pon-packages.config (or forced by
+# scripts/devices.py), otherwise validate_config rejects the build before any
+# compilation starts. Packages that only exist inside an upstream device
+# definition and cannot be selected here must not be listed.
+
+# LuCI web interface
 luci
-luci-light
 luci-mod-admin-full
 luci-mod-network
 luci-mod-system
@@ -10,40 +18,45 @@ luci-app-package-manager
 luci-ssl
 luci-proto-ipv6
 luci-proto-ppp
-luci-app-attendedsysupgrade
-kmod-tun
-luci-app-openclash
-luci-app-lucky
-luci-theme-footstrap
 luci-i18n-base-zh-cn
-luci-i18n-lucky-zh-cn
-luci-i18n-upnp-zh-cn
+luci-app-airoha-npu
 uhttpd
 uhttpd-mod-ubus
 uhttpd-mod-ucode
-luci-app-gecoosac
-luci-app-samba4
-luci-app-wolultra
-luci-app-airoha-npu
+
+# Name resolution, shell and routing
 dnsmasq-full
 bash
+ip-full
+kmod-tun
+
+# Hardware flow offload
+kmod-nf-flow
+kmod-nf-conntrack-bridge
+kmod-nft-bridge
+kmod-nft-core
+kmod-nft-nat
+kmod-nft-offload
+
+# VPN, queueing and TCP tuning
+kmod-wireguard
+kmod-sched-cake
+kmod-tcp-bbr
+
+# UBI / NAND / U-Boot environment maintenance (calibration read-back, rescue)
+uboot-envtools
+nand-utils
+ubi-utils
+kmod-mtd-rw
+
+# Diagnostics
 curl
 ca-bundle
-ip-full
-ruby
-ruby-yaml
-unzip
-kmod-airoha-pon-frontend
+htop
+iperf3
+
+# PON stack forced by the upstream nokia_xg-040g-tf-ubi device definition
 kmod-airoha-en7572
 kmod-airoha-xpon
 airoha-ponctl
 airoha-pond
-airoha-pon-debug
-luci-app-pon
-luci-i18n-pon-zh-cn
-uboot-envtools
-nand-utils
-ubi-utils
-usbutils
-usbmuxd
-luci-app-autoreboot

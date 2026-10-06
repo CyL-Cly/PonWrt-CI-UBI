@@ -1,0 +1,3 @@
+This directory is copied into the OpenWrt build tree by scripts/configure.sh.
+It exists so that copy always has a source directory; the XG-040G-TF image
+needs no root file overrides.
