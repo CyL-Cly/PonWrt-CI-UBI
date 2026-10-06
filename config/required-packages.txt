@@ -38,6 +38,14 @@ kmod-nft-core
 kmod-nft-nat
 kmod-nft-offload
 
+# Hardware QoS: tc offload into the AN7581 QDMA shaper/scheduler and meter.
+# kmod-sched-core = sch_htb + cls_matchall, kmod-sched = sch_ets,
+# kmod-sched-act-police = act_police, tc-tiny = /sbin/tc.
+kmod-sched-core
+kmod-sched
+kmod-sched-act-police
+tc-tiny
+
 # VPN, queueing and TCP tuning
 kmod-wireguard
 kmod-sched-cake
