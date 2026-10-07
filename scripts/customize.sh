@@ -60,6 +60,8 @@ normalize_luci_package() {
   local target="$1"
   local makefile="./package/${target}/Makefile"
 
+  grep -q 'feeds/luci/luci.mk' "$makefile" || return 0
+
   sed -i 's|^\s*include\s*\(\.\./\)\{2\}luci\.mk\s*$|include $(TOPDIR)/feeds/luci/luci.mk|' "$makefile"
   sed -i 's|[[:space:]]\+@TARGET_[A-Za-z0-9_]*||g' "$makefile"
   if ! grep -q '^PKG_NAME:=' "$makefile"; then
