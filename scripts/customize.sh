@@ -58,11 +58,24 @@ clone_direct() {
 # directory-name derivation.
 normalize_luci_package() {
   local target="$1"
-  local makefile="./package/${target}/Makefile"
+  local root="./package/${target}"
+  local makefile="${root}/Makefile"
 
-  grep -q 'feeds/luci/luci.mk' "$makefile" || return 0
+  # The package scanner keys packages by the directory basename
+  # (include/scan.awk). A leftover nested copy with the same basename replaces
+  # the top-level package, and its relative ../../luci.mk include cannot be
+  # resolved from that depth, so defconfig never sees the package.
+  if [ -f "${root}/${target}/Makefile" ]; then
+    echo "Removing stale nested package copy ${root}/${target}" >&2
+    rm -rf "${root}/${target}"
+  fi
 
-  sed -i 's|^\s*include\s*\(\.\./\)\{2\}luci\.mk\s*$|include $(TOPDIR)/feeds/luci/luci.mk|' "$makefile"
+  find "$root" -name Makefile -print0 | while IFS= read -r -d '' nested; do
+    grep -qE '^[[:space:]]*include[[:space:]]+(\.\./)+luci\.mk[[:space:]]*$' "$nested" || continue
+    sed -i 's|^\s*include\s*\(\.\./\)\{1,\}luci\.mk\s*$|include $(TOPDIR)/feeds/luci/luci.mk|' "$nested"
+    sed -i 's|[[:space:]]\+@TARGET_[A-Za-z0-9_]*||g' "$nested"
+  done
+
   sed -i 's|[[:space:]]\+@TARGET_[A-Za-z0-9_]*||g' "$makefile"
   if ! grep -q '^PKG_NAME:=' "$makefile"; then
     sed -i "1i PKG_NAME:=${target}" "$makefile"
@@ -76,10 +89,12 @@ echo "Importing the third-party packages used by the package set..."
 #
 # It was originally taken from bingoguo93/luci-app-airoha-npu, which now returns
 # 404 and is no longer listed among that owner's public repositories. This fork
-# is used instead: it is a plain LuCI package whose directory name yields the
-# luci-app-airoha-npu package and whose Makefile already includes
-# $(TOPDIR)/feeds/luci/luci.mk, so it can be imported without any include
-# fixup. Its register accesses need CONFIG_BUSYBOX_CONFIG_DEVMEM, which
+# is used instead. Its tree still ships a stale nested luci-app-airoha-npu/
+# directory whose Makefile includes ../../luci.mk; the scanner keys packages by
+# basename and would pick that nested copy over the fixed top-level Makefile.
+# normalize_luci_package drops the nested copy, pins the luci.mk include and
+# drops the @TARGET_airoha dependency, which a package Kconfig cannot see.
+# Its register accesses need CONFIG_BUSYBOX_CONFIG_DEVMEM, which
 # config/common.config already enables.
 clone_direct "luci-app-airoha-npu" "rchen14b/luci-app-airoha-npu" "main"
 
